@@ -140,10 +140,12 @@ Expected behavior:
 
 - If the PR target branch is not in the configured chain, the workflow exits
   successfully and skips the check.
-- If the baseline chain is healthy downstream, the PR is tested through every
-  later branch.
-- If the baseline chain is already broken downstream, the PR is tested only
-  until that known-broken edge.
+- The baseline sanity check starts at the PR target branch, not at the global
+  configured `base_branch`.
+- If the baseline chain is healthy downstream from the PR target, the PR is
+  tested through every later branch.
+- If the baseline chain is already broken downstream from the PR target, the PR
+  is tested only until that known-broken edge.
 - If the PR causes a new conflict before the known-broken edge, the workflow
   fails.
 - If the only conflict is already present in the baseline chain, the PR workflow

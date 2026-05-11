@@ -257,7 +257,6 @@ class MergeCheckTests(unittest.TestCase):
                 "mid",
                 "pr",
                 scratch,
-                "old",
             )
 
         self.assertEqual(len(results), 1)

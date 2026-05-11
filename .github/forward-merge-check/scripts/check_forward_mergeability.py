@@ -232,16 +232,6 @@ def load_base_branch(args: argparse.Namespace, branches: list[str]) -> str:
     return base_branch
 
 
-def load_chain_base_branch(args: argparse.Namespace, branches: list[str]) -> str:
-    if args.branches:
-        return branches[0]
-
-    cfg = load_config(args.config_file)
-    base_branch = cfg.get("base_branch") or branches[0]
-
-    return base_branch if isinstance(base_branch, str) and base_branch in branches else branches[0]
-
-
 def remote_ref(branch: str) -> str:
     return f"refs/remotes/origin/{branch}"
 
@@ -785,7 +775,6 @@ def run_pr_mode(
     base_branch: str,
     pr_ref: str,
     scratch_root: Path,
-    chain_base_branch: Optional[str] = None,
 ) -> list[MergeResult]:
     results: list[MergeResult] = []
 
@@ -795,11 +784,9 @@ def run_pr_mode(
         print("Skipping PR forward-merge check.")
         return results
 
-    baseline_base = chain_base_branch or branches[0]
-
     print()
-    print("Checking baseline chain health before applying PR changes.")
-    baseline_results = run_chain_health_mode(repo, branches, baseline_base, scratch_root)
+    print(f"Checking baseline chain health from {base_branch} before applying PR changes.")
+    baseline_results = run_chain_health_mode(repo, branches, base_branch, scratch_root)
     broken_target_index = first_downstream_broken_target_index(
         branches,
         base_branch,
@@ -937,7 +924,6 @@ def main() -> int:
                 base_branch,
                 args.pr_ref,
                 scratch_root,
-                chain_base_branch=load_chain_base_branch(args, branches),
             )
         else:
             results = run_chain_health_mode(repo, branches, base_branch, scratch_root)
