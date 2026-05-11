@@ -20,5 +20,6 @@ jobs:
       state_variable_name: FORWARD_MERGE_CHAIN_STATE
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
+      state_update_token: ${{ secrets.FORWARD_MERGE_STATE_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
       zulip_webhook_url: ${{ secrets.ZULIP_WEBHOOK_URL }}

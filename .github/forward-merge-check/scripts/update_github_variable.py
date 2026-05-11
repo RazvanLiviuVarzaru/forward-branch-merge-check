@@ -32,6 +32,12 @@ def api_request(token: str, method: str, url: str, payload: dict | None = None) 
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return 404
+        if exc.code == 403:
+            raise PermissionError(
+                "GitHub API returned 403 while updating repository variables. "
+                "Use a token that has Variables write permission for the target repository. "
+                "The workflow GITHUB_TOKEN is not sufficient for this endpoint."
+            ) from exc
         raise
 
 
@@ -55,23 +61,28 @@ def main() -> int:
     value = args.value_file.read_text(encoding="utf-8")
     base_url = f"https://api.github.com/repos/{repository}/actions/variables"
 
-    status = api_request(
-        token,
-        "PATCH",
-        f"{base_url}/{args.name}",
-        {"name": args.name, "value": value},
-    )
-
-    if status == 404:
-        api_request(
+    try:
+        status = api_request(
             token,
-            "POST",
-            base_url,
+            "PATCH",
+            f"{base_url}/{args.name}",
             {"name": args.name, "value": value},
         )
-        print(f"Created repository variable {args.name}.")
-    else:
-        print(f"Updated repository variable {args.name}.")
+
+        if status == 404:
+            api_request(
+                token,
+                "POST",
+                base_url,
+                {"name": args.name, "value": value},
+            )
+            print(f"Created repository variable {args.name}.")
+        else:
+            print(f"Updated repository variable {args.name}.")
+
+    except PermissionError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
     return 0
 

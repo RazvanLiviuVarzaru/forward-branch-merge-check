@@ -32,6 +32,9 @@ on:
       zulip_webhook_url:
         description: Optional Zulip incoming webhook URL.
         required: false
+      state_update_token:
+        description: Optional token with Variables write permission for the target repository.
+        required: false
 
 permissions:
   contents: read
@@ -41,6 +44,8 @@ jobs:
   chain-health:
     runs-on: ubuntu-latest
     name: Check global forward merge chain
+    env:
+      HAS_STATE_UPDATE_TOKEN: ${{ secrets.state_update_token != '' }}
 
     steps:
       - name: Checkout target repository
@@ -90,13 +95,20 @@ jobs:
             --config-file "tool/${{ inputs.config_path }}"
 
       - name: Store latest chain state
-        if: always() && hashFiles('forward-merge-state.json') != ''
+        if: always() && hashFiles('forward-merge-state.json') != '' && env.HAS_STATE_UPDATE_TOKEN == 'true'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.state_update_token }}
         run: |
           python3 tool/.github/forward-merge-check/scripts/update_github_variable.py \
             --name "${{ inputs.state_variable_name }}" \
             --value-file forward-merge-state.json
+
+      - name: Skip state storage
+        if: always() && hashFiles('forward-merge-state.json') != '' && env.HAS_STATE_UPDATE_TOKEN != 'true'
+        run: |
+          echo "No state_update_token secret was provided."
+          echo "Skipping repository variable update for ${{ inputs.state_variable_name }}."
+          echo "Duplicate notification suppression requires a token with target repository Variables write permission."
 
       - name: Fail workflow when chain is blocked
         if: steps.chain.outcome == 'failure'

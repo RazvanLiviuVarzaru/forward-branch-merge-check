@@ -31,7 +31,7 @@ update_var = load_script("update_github_variable")
 
 
 def quietly(func, *args, **kwargs):
-    with contextlib.redirect_stdout(io.StringIO()):
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         return func(*args, **kwargs)
 
 
@@ -460,6 +460,26 @@ class UpdateGithubVariableTests(unittest.TestCase):
         self.assertEqual(api_request.call_count, 2)
         self.assertEqual(api_request.call_args_list[0].args[1], "PATCH")
         self.assertEqual(api_request.call_args_list[1].args[1], "POST")
+
+    def test_variable_permission_error_is_reported_cleanly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            value_file = Path(tmp) / "state.json"
+            value_file.write_text('{"status":"healthy"}', encoding="utf-8")
+
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "token", "GITHUB_REPOSITORY": "owner/repo"},
+                clear=False,
+            ):
+                with mock.patch.object(
+                    update_var,
+                    "api_request",
+                    side_effect=PermissionError("Variables write permission required."),
+                ):
+                    with mock.patch.object(sys, "argv", ["update", "--name", "STATE", "--value-file", str(value_file)]):
+                        code = quietly(update_var.main)
+
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

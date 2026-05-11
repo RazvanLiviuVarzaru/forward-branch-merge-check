@@ -205,6 +205,7 @@ jobs:
       state_variable_name: FORWARD_MERGE_CHAIN_STATE
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
+      state_update_token: ${{ secrets.FORWARD_MERGE_STATE_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
       zulip_webhook_url: ${{ secrets.ZULIP_WEBHOOK_URL }}
 ```
@@ -267,6 +268,21 @@ variable:
 ```text
 FORWARD_MERGE_CHAIN_STATE
 ```
+
+Updating this variable requires a target-repository secret:
+
+```text
+FORWARD_MERGE_STATE_TOKEN
+```
+
+Use a fine-grained personal access token or GitHub App token that can access the
+target repository and has repository `Variables` write permission. The workflow
+`GITHUB_TOKEN` is not sufficient for the repository variables REST API.
+
+If `FORWARD_MERGE_STATE_TOKEN` is not configured, the workflow still runs the
+merge check and sends any current notification decision, but it skips state
+storage. Without state storage, duplicate notification suppression cannot work
+across scheduled runs.
 
 The state contains:
 
