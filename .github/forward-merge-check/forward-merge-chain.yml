@@ -6,8 +6,6 @@ branches:
   - "10.11"
   - "11.4"
   - "11.8"
-  - "12.3"
-  - "main"
 
 notifications:
   slack:
