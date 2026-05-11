@@ -140,6 +140,10 @@ Expected behavior:
 
 - If the PR target branch is not in the configured chain, the workflow exits
   successfully and skips the check.
+- The PR workflow does not test whether the PR branch merges into its own
+  target branch. GitHub already computes the pull request mergeability for the
+  target branch, and if that merge has conflicts GitHub will not run the normal
+  pull request CI for the synthetic merge commit.
 - The baseline sanity check starts at the PR target branch, not at the global
   configured `base_branch`.
 - If the baseline chain is healthy downstream from the PR target, the PR is
