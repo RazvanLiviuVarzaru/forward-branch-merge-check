@@ -198,6 +198,13 @@ notifications:
 
 
 class MergeCheckTests(unittest.TestCase):
+    def test_missing_branch_refs_reports_fetch_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_clean_chain(Path(tmp))
+
+            with self.assertRaisesRegex(ValueError, "refs/remotes/origin/missing"):
+                check.ensure_branch_refs(repo.path, ["old", "missing"])
+
     def test_chain_health_clean_chain(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = make_clean_chain(Path(tmp))

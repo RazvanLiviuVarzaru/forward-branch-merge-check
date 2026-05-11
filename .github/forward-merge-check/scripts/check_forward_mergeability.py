@@ -250,6 +250,43 @@ def ensure_ref(repo: Path, ref: str) -> None:
     git(repo, ["rev-parse", "--verify", "--quiet", ref])
 
 
+def has_ref(repo: Path, ref: str) -> bool:
+    proc = git(repo, ["rev-parse", "--verify", "--quiet", ref], check=False)
+    return proc.returncode == 0
+
+
+def missing_branch_refs(repo: Path, branches: list[str]) -> list[str]:
+    return [branch for branch in branches if not has_ref(repo, remote_ref(branch))]
+
+
+def format_missing_branch_refs_error(repo: Path, branches: list[str], missing: list[str]) -> str:
+    configured = "\n".join(f"  - {branch}" for branch in branches)
+    fetch_lines = " \\\n  ".join(
+        f"+refs/heads/{branch}:refs/remotes/origin/{branch}" for branch in missing
+    )
+
+    return (
+        "The target repository is missing configured branch refs.\n\n"
+        f"Target repository: {repo}\n\n"
+        "Configured branch chain:\n"
+        f"{configured}\n\n"
+        "Missing remote-tracking refs:\n"
+        + "\n".join(f"  - {remote_ref(branch)}" for branch in missing)
+        + "\n\n"
+        "Fetch the missing refs into the target repository:\n\n"
+        f"git -C {repo} fetch origin \\\n"
+        f"  {fetch_lines}\n\n"
+        "If one of these branches no longer exists, update the configured chain "
+        "instead of fetching it."
+    )
+
+
+def ensure_branch_refs(repo: Path, branches: list[str]) -> None:
+    missing = missing_branch_refs(repo, branches)
+    if missing:
+        raise ValueError(format_missing_branch_refs_error(repo, branches, missing))
+
+
 def is_ancestor(repo: Path, maybe_ancestor: str, descendant: str) -> bool:
     proc = git(
         repo,
@@ -889,6 +926,8 @@ def main() -> int:
         print(f"Mode: {args.mode}")
         print(f"Base branch: {base_branch}")
 
+        ensure_branch_refs(repo, branches)
+
         if args.mode == "pr":
             if not args.pr_ref:
                 raise ValueError("--pr-ref is required in PR mode.")
@@ -924,7 +963,7 @@ def main() -> int:
         print()
         print("ERROR")
         print("-" * 72)
-        print(str(exc), file=sys.stderr)
+        print(str(exc))
         return 2
 
     finally:

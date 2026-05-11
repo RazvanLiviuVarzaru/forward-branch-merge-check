@@ -344,6 +344,11 @@ git -C ~/src/server fetch origin \
   +refs/heads/main:refs/remotes/origin/main
 ```
 
+If a configured branch does not exist in the target repository, update the
+config file instead of fetching it. For example, if the config lists `12.3` but
+the target repo only has `origin/12.0` and `origin/12.1`, change the chain to
+the real branch names before running the check.
+
 Print configured branches:
 
 ```bash
