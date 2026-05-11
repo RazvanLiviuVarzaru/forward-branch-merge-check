@@ -27,7 +27,6 @@ def load_script(name: str):
 
 check = load_script("check_forward_mergeability")
 send = load_script("send_chain_notification")
-update_var = load_script("update_github_variable")
 
 
 def quietly(func, *args, **kwargs):
@@ -295,6 +294,16 @@ class StateTests(unittest.TestCase):
         )
         self.assertEqual(check.notification_reasons(check.compact_state(state), state), [])
 
+    def test_load_previous_state_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_file = Path(tmp) / "state.json"
+            state_file.write_text('{"status": "healthy"}', encoding="utf-8")
+
+            state = check.load_previous_state_file(state_file)
+
+        self.assertEqual(state, {"status": "healthy"})
+        self.assertIsNone(check.load_previous_state_file(Path(tmp) / "missing.json"))
+
     def test_resolution_and_health_change_reasons(self):
         previous_broken = {
             "status": "broken",
@@ -421,65 +430,6 @@ notifications:
         self.assertEqual(code, 0)
         slack_post.assert_called_once_with("https://slack.example", "hello")
         zulip_post.assert_not_called()
-
-
-class UpdateGithubVariableTests(unittest.TestCase):
-    def test_updates_existing_variable(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            value_file = Path(tmp) / "state.json"
-            value_file.write_text('{"status":"healthy"}', encoding="utf-8")
-
-            with mock.patch.dict(
-                os.environ,
-                {"GITHUB_TOKEN": "token", "GITHUB_REPOSITORY": "owner/repo"},
-                clear=False,
-            ):
-                with mock.patch.object(update_var, "api_request", return_value=204) as api_request:
-                    with mock.patch.object(sys, "argv", ["update", "--name", "STATE", "--value-file", str(value_file)]):
-                        code = quietly(update_var.main)
-
-        self.assertEqual(code, 0)
-        api_request.assert_called_once()
-        self.assertEqual(api_request.call_args.args[1], "PATCH")
-
-    def test_creates_missing_variable(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            value_file = Path(tmp) / "state.json"
-            value_file.write_text('{"status":"healthy"}', encoding="utf-8")
-
-            with mock.patch.dict(
-                os.environ,
-                {"GITHUB_TOKEN": "token", "GITHUB_REPOSITORY": "owner/repo"},
-                clear=False,
-            ):
-                with mock.patch.object(update_var, "api_request", side_effect=[404, 201]) as api_request:
-                    with mock.patch.object(sys, "argv", ["update", "--name", "STATE", "--value-file", str(value_file)]):
-                        code = quietly(update_var.main)
-
-        self.assertEqual(code, 0)
-        self.assertEqual(api_request.call_count, 2)
-        self.assertEqual(api_request.call_args_list[0].args[1], "PATCH")
-        self.assertEqual(api_request.call_args_list[1].args[1], "POST")
-
-    def test_variable_permission_error_is_reported_cleanly(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            value_file = Path(tmp) / "state.json"
-            value_file.write_text('{"status":"healthy"}', encoding="utf-8")
-
-            with mock.patch.dict(
-                os.environ,
-                {"GITHUB_TOKEN": "token", "GITHUB_REPOSITORY": "owner/repo"},
-                clear=False,
-            ):
-                with mock.patch.object(
-                    update_var,
-                    "api_request",
-                    side_effect=PermissionError("Variables write permission required."),
-                ):
-                    with mock.patch.object(sys, "argv", ["update", "--name", "STATE", "--value-file", str(value_file)]):
-                        code = quietly(update_var.main)
-
-        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

@@ -572,6 +572,13 @@ def load_previous_state(raw_state: str | None) -> Optional[dict]:
     return parsed if isinstance(parsed, dict) else None
 
 
+def load_previous_state_file(path: Optional[Path]) -> Optional[dict]:
+    if path is None or not path.exists():
+        return None
+
+    return load_previous_state(path.read_text(encoding="utf-8"))
+
+
 def notification_reasons(previous: Optional[dict], state: dict) -> list[NotificationReason]:
     if previous is None:
         return [NotificationReason.FIRST_RUN] if state["status"] == "broken" else []
@@ -876,9 +883,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--state-input",
-        default=os.environ.get("FORWARD_MERGE_CHAIN_STATE", ""),
-        help="Previous state JSON. Defaults to FORWARD_MERGE_CHAIN_STATE.",
+        default="",
+        help="Previous state JSON.",
     )
+    parser.add_argument("--state-input-file", type=Path, help="Read previous state JSON from this file.")
     parser.add_argument("--state-output", type=Path, help="Write current state JSON here.")
     parser.add_argument("--notification-output", type=Path, help="Write notification decision JSON here.")
     parser.add_argument("--github-output", type=Path, default=Path(os.environ["GITHUB_OUTPUT"]) if os.environ.get("GITHUB_OUTPUT") else None)
@@ -932,7 +940,10 @@ def main() -> int:
 
         if args.mode == "chain-health":
             state = current_state(repo, branches, base_branch, results)
-            reasons = notification_reasons(load_previous_state(args.state_input), state)
+            previous_state = load_previous_state_file(args.state_input_file)
+            if previous_state is None:
+                previous_state = load_previous_state(args.state_input)
+            reasons = notification_reasons(previous_state, state)
             write_outputs(args, state, reasons)
 
             if reasons:

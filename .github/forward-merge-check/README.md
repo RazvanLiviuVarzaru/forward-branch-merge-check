@@ -193,7 +193,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   chain-health:
@@ -202,10 +201,9 @@ jobs:
       tool_repository: YOUR_ORG/forward-branch-merge-check
       tool_ref: main
       config_path: .github/forward-merge-check/forward-merge-chain.yml
-      state_variable_name: FORWARD_MERGE_CHAIN_STATE
+      state_cache_key: forward-merge-chain-state
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
-      state_update_token: ${{ secrets.FORWARD_MERGE_STATE_TOKEN }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
       zulip_webhook_url: ${{ secrets.ZULIP_WEBHOOK_URL }}
 ```
@@ -262,27 +260,25 @@ not a proof.
 Notifications are only sent by the chain-health workflow. PR workflows do not
 send Slack or Zulip messages.
 
-The chain-health workflow stores previous health state in a target-repository
-variable:
+The chain-health workflow stores previous health state in the target
+repository's GitHub Actions cache.
 
 ```text
-FORWARD_MERGE_CHAIN_STATE
+restore prefix: forward-merge-chain-state-
+saved key:      forward-merge-chain-state-<run_id>-<run_attempt>
+path: .forward-merge-check-state/state.json
 ```
 
-Updating this variable requires a target-repository secret:
+The workflow restores the newest cache entry with the configured prefix before
+the check, writes the new state after the check, and saves it under a new
+run-specific cache key. This avoids personal access tokens or GitHub Apps.
 
-```text
-FORWARD_MERGE_STATE_TOKEN
-```
+The chain-health job uses a concurrency group so two scheduled/manual runs do
+not compute and save state at the same time.
 
-Use a fine-grained personal access token or GitHub App token that can access the
-target repository and has repository `Variables` write permission. The workflow
-`GITHUB_TOKEN` is not sufficient for the repository variables REST API.
-
-If `FORWARD_MERGE_STATE_TOKEN` is not configured, the workflow still runs the
-merge check and sends any current notification decision, but it skips state
-storage. Without state storage, duplicate notification suppression cannot work
-across scheduled runs.
+GitHub caches are immutable and can be evicted. Keeping one tiny state file per
+run is intentional; GitHub will age out old entries. If the state cache
+disappears, the next run acts like a first run and creates a new cache entry.
 
 The state contains:
 

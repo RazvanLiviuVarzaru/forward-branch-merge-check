@@ -17,11 +17,11 @@ on:
         required: false
         type: string
         default: .github/forward-merge-check/forward-merge-chain.yml
-      state_variable_name:
-        description: Repository variable used to store previous chain state.
+      state_cache_key:
+        description: GitHub Actions cache key prefix used to restore and save chain state.
         required: false
         type: string
-        default: FORWARD_MERGE_CHAIN_STATE
+        default: forward-merge-chain-state
     secrets:
       tool_repository_token:
         description: Optional token for checking out a private tool repository.
@@ -32,20 +32,17 @@ on:
       zulip_webhook_url:
         description: Optional Zulip incoming webhook URL.
         required: false
-      state_update_token:
-        description: Optional token with Variables write permission for the target repository.
-        required: false
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   chain-health:
     runs-on: ubuntu-latest
     name: Check global forward merge chain
-    env:
-      HAS_STATE_UPDATE_TOKEN: ${{ secrets.state_update_token != '' }}
+    concurrency:
+      group: forward-merge-chain-health-${{ github.repository }}-${{ inputs.state_cache_key }}
+      cancel-in-progress: false
 
     steps:
       - name: Checkout target repository
@@ -71,18 +68,27 @@ jobs:
             git -C target fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
           done
 
+      - name: Restore previous chain state
+        id: state-cache-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: .forward-merge-check-state/state.json
+          key: ${{ inputs.state_cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ inputs.state_cache_key }}-
+
       - name: Test branch chain
         id: chain
         continue-on-error: true
-        env:
-          FORWARD_MERGE_CHAIN_STATE: ${{ vars[inputs.state_variable_name] }}
         run: |
+          mkdir -p .forward-merge-check-state
           python3 tool/.github/forward-merge-check/scripts/check_forward_mergeability.py \
             --repo target \
             --mode chain-health \
             --config-file "tool/${{ inputs.config_path }}" \
-            --state-output forward-merge-state.json \
-            --notification-output forward-merge-notification.json
+            --state-input-file .forward-merge-check-state/state.json \
+            --state-output .forward-merge-check-state/state.json \
+            --notification-output .forward-merge-check-state/notification.json
 
       - name: Send state-change notifications
         if: steps.chain.outputs.should_notify == 'true'
@@ -91,24 +97,15 @@ jobs:
           ZULIP_WEBHOOK_URL: ${{ secrets.zulip_webhook_url }}
         run: |
           python3 tool/.github/forward-merge-check/scripts/send_chain_notification.py \
-            --notification forward-merge-notification.json \
+            --notification .forward-merge-check-state/notification.json \
             --config-file "tool/${{ inputs.config_path }}"
 
-      - name: Store latest chain state
-        if: always() && hashFiles('forward-merge-state.json') != '' && env.HAS_STATE_UPDATE_TOKEN == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.state_update_token }}
-        run: |
-          python3 tool/.github/forward-merge-check/scripts/update_github_variable.py \
-            --name "${{ inputs.state_variable_name }}" \
-            --value-file forward-merge-state.json
-
-      - name: Skip state storage
-        if: always() && hashFiles('forward-merge-state.json') != '' && env.HAS_STATE_UPDATE_TOKEN != 'true'
-        run: |
-          echo "No state_update_token secret was provided."
-          echo "Skipping repository variable update for ${{ inputs.state_variable_name }}."
-          echo "Duplicate notification suppression requires a token with target repository Variables write permission."
+      - name: Save latest chain state
+        if: always() && hashFiles('.forward-merge-check-state/state.json') != ''
+        uses: actions/cache/save@v5
+        with:
+          path: .forward-merge-check-state/state.json
+          key: ${{ inputs.state_cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Fail workflow when chain is blocked
         if: steps.chain.outcome == 'failure'
