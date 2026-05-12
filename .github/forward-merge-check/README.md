@@ -47,9 +47,13 @@ examples/target-workflows/
 
 Replace `YOUR_ORG/forward-branch-merge-check` with the real tool repository.
 
-For PR checks, the tiny PR workflow stub should live on the target repository's
-default branch. It can run for pull requests targeting release branches because
-`pull_request` workflows can be filtered by the pull request base branch.
+For PR checks, the tiny PR workflow stub must exist on every target branch that
+should run this check. GitHub discovers `pull_request` workflows from the pull
+request base branch. For example, a PR targeting `10.11` will only run this
+workflow if `.github/workflows/pr-forward-mergeability.yml` exists on `10.11`.
+
+The reusable workflow implementation still lives in the tool repository. The
+files copied to the target branches are only small stubs that call it.
 
 For the scheduled chain-health check, the tiny chain-health workflow only needs
 to exist on the target repository's default branch.
