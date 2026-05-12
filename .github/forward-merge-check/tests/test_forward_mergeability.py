@@ -395,6 +395,7 @@ class StateTests(unittest.TestCase):
         self.assertIn("*Blocked edge:* `old` -> `next`", notification["text"])
         self.assertIn("<https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
         self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", notification["text"])
+        self.assertIn("*Conflicted files (1):*\n```\n- file.txt\n```", notification["text"])
         self.assertNotIn("Base branch:", notification["text"])
         self.assertNotIn("Health fingerprint:", notification["text"])
         self.assertNotIn("Chain fingerprint:", notification["text"])

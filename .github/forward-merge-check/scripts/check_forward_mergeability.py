@@ -690,7 +690,9 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
 
         if blocked["conflicted_files"]:
             lines.append(f"*Conflicted files ({len(blocked['conflicted_files'])}):*")
-            lines.extend(f"- `{path}`" for path in blocked["conflicted_files"])
+            lines.append("```")
+            lines.extend(f"- {path}" for path in blocked["conflicted_files"])
+            lines.append("```")
 
     return "\n".join(lines)
 
