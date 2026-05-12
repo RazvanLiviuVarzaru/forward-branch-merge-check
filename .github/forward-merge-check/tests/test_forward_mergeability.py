@@ -352,8 +352,8 @@ class StateTests(unittest.TestCase):
                 "checked_at": "2026-05-11T00:00:00+00:00",
                 "status": "broken",
                 "base_branch": "old",
-                "branches": ["old", "next"],
-                "branch_heads": {"old": "a", "next": "b"},
+                "branches": ["old", "next", "main"],
+                "branch_heads": {"old": "a", "next": "b", "main": "c"},
                 "config_fingerprint": "cfg",
                 "chain_fingerprint": "chain",
                 "health_fingerprint": "health",
@@ -369,6 +369,20 @@ class StateTests(unittest.TestCase):
                             "sha": "abc",
                             "author": "Tester <tester@example.invalid>",
                             "subject": "break it",
+                        },
+                        "candidate_commits": [],
+                    },
+                    {
+                        "source_label": "next",
+                        "source_ref": "refs/remotes/origin/next",
+                        "target": "main",
+                        "status": "conflict",
+                        "message": "blocked again",
+                        "conflicted_files": ["other.txt", "src/deep/path.cc"],
+                        "first_conflicting_commit": {
+                            "sha": "def456789012",
+                            "author": "Second Tester <second@example.invalid>",
+                            "subject": "break it again",
                         },
                         "candidate_commits": [],
                     }
@@ -392,10 +406,21 @@ class StateTests(unittest.TestCase):
         self.assertNotIn("candidate_commits", compact["results"][0])
         self.assertTrue(notification["notify"])
         self.assertTrue(notification["text"].startswith("*Repository:* `owner/repo`"))
-        self.assertIn("*Blocked edge:* `old` -> `next`", notification["text"])
+        self.assertIn("*🚨 Forward merge chain is blocked*", notification["text"])
+        self.assertIn("*Blocked edges (2):* `old` -> `next`, `next` -> `main`", notification["text"])
+        self.assertIn("🚨 `old` -> `next`: conflict", notification["text"])
+        self.assertIn("🚨 `next` -> `main`: conflict", notification["text"])
         self.assertIn("<https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
         self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", notification["text"])
+        self.assertIn(
+            "<https://github.example/owner/repo/commit/def456789012|def456789012>",
+            notification["text"],
+        )
         self.assertIn("*Conflicted files (1):*\n```\n- file.txt\n```", notification["text"])
+        self.assertIn(
+            "*Conflicted files (2):*\n```\n- other.txt\n- src/deep/path.cc\n```",
+            notification["text"],
+        )
         self.assertNotIn("Base branch:", notification["text"])
         self.assertNotIn("Health fingerprint:", notification["text"])
         self.assertNotIn("Chain fingerprint:", notification["text"])

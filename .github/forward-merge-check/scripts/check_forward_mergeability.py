@@ -654,10 +654,20 @@ def humanize_notification_reasons(reasons: list[NotificationReason]) -> str:
     return ", ".join(labels.get(reason, reason.value) for reason in reasons)
 
 
+def result_status_label(status: str) -> str:
+    labels = {
+        "merge_ok": "merged cleanly",
+        "nothing_to_merge": "already contained",
+        "conflict": "conflict",
+        "skipped": "skipped",
+    }
+    return labels.get(status, status)
+
+
 def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
-    headline = "Forward merge chain is healthy"
+    headline = "✅ Forward merge chain is healthy"
     if state["status"] == "broken":
-        headline = "Forward merge chain is blocked"
+        headline = "🚨 Forward merge chain is blocked"
 
     lines = [
         f"*Repository:* `{github_repository_label()}`",
@@ -667,9 +677,12 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
     if reasons:
         lines.append(f"*Reason:* {humanize_notification_reasons(reasons)}")
 
-    blocked = next((result for result in state["results"] if result["status"] == "conflict"), None)
-    if blocked:
-        lines.append(f"*Blocked edge:* `{blocked['source_label']}` -> `{blocked['target']}`")
+    blocked_results = [result for result in state["results"] if result["status"] == "conflict"]
+    if blocked_results:
+        blocked_edges = ", ".join(
+            f"`{result['source_label']}` -> `{result['target']}`" for result in blocked_results
+        )
+        lines.append(f"*Blocked edges ({len(blocked_results)}):* {blocked_edges}")
 
     lines.append(f"*Chain:* {' -> '.join(f'`{branch}`' for branch in state['branches'])}")
 
@@ -677,7 +690,20 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
     if action_run_url:
         lines.append(f"*GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
 
-    if blocked:
+    if state["results"]:
+        lines.append("*Checked edges:*")
+        for result in state["results"]:
+            icon = "🚨" if result["status"] == "conflict" else "✅"
+            lines.append(
+                f"{icon} `{result['source_label']}` -> `{result['target']}`: "
+                f"{result_status_label(result['status'])}"
+            )
+
+    if blocked_results:
+        lines.append("*Conflict details:*")
+
+    for blocked in blocked_results:
+        lines.append(f"🚨 *Edge:* `{blocked['source_label']}` -> `{blocked['target']}`")
         commit = blocked.get("first_conflicting_commit")
         if commit:
             short_sha = commit["sha"][:12]
@@ -687,6 +713,8 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
                 f"{commit_label} - {commit['subject']}"
             )
             lines.append(f"*Author:* {commit['author']}")
+        else:
+            lines.append("*First likely source-side commit:* not identified")
 
         if blocked["conflicted_files"]:
             lines.append(f"*Conflicted files ({len(blocked['conflicted_files'])}):*")
