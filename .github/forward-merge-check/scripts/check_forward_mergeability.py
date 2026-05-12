@@ -609,35 +609,89 @@ def notification_reasons(previous: Optional[dict], state: dict) -> list[Notifica
     return reasons
 
 
+def github_repository_label() -> str:
+    return os.environ.get("GITHUB_REPOSITORY", "unknown repository")
+
+
+def github_repository_url() -> Optional[str]:
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    if not repository:
+        return None
+
+    server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    return f"{server_url}/{repository}"
+
+
+def github_action_run_url() -> Optional[str]:
+    repository_url = github_repository_url()
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if not repository_url or not run_id:
+        return None
+
+    return f"{repository_url}/actions/runs/{run_id}"
+
+
+def github_commit_url(sha: str) -> Optional[str]:
+    repository_url = github_repository_url()
+    if not repository_url:
+        return None
+
+    return f"{repository_url}/commit/{sha}"
+
+
+def slack_link(url: Optional[str], label: str) -> str:
+    return f"<{url}|{label}>" if url else label
+
+
+def humanize_notification_reasons(reasons: list[NotificationReason]) -> str:
+    labels = {
+        NotificationReason.FIRST_RUN: "first observed broken state",
+        NotificationReason.BROKEN: "chain became blocked",
+        NotificationReason.RESOLVED: "chain recovered",
+        NotificationReason.HEALTH_CHANGED: "blocked result changed",
+        NotificationReason.CHAIN_CHANGED: "configured chain changed",
+    }
+    return ", ".join(labels.get(reason, reason.value) for reason in reasons)
+
+
 def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
-    reason_text = ", ".join(reason.value for reason in reasons)
     headline = "Forward merge chain is healthy"
     if state["status"] == "broken":
         headline = "Forward merge chain is blocked"
 
     lines = [
-        f"{headline} ({reason_text})",
-        f"Base branch: {state['base_branch']}",
-        f"Chain: {' -> '.join(state['branches'])}",
+        f"*Repository:* `{github_repository_label()}`",
+        f"*{headline}*",
     ]
+
+    if reasons:
+        lines.append(f"*Reason:* {humanize_notification_reasons(reasons)}")
 
     blocked = next((result for result in state["results"] if result["status"] == "conflict"), None)
     if blocked:
-        lines.append(f"Blocked edge: {blocked['source_label']} -> {blocked['target']}")
+        lines.append(f"*Blocked edge:* `{blocked['source_label']}` -> `{blocked['target']}`")
 
-        if blocked["conflicted_files"]:
-            lines.append("Conflicted files:")
-            lines.extend(f"- {path}" for path in blocked["conflicted_files"])
+    lines.append(f"*Chain:* {' -> '.join(f'`{branch}`' for branch in state['branches'])}")
 
+    action_run_url = github_action_run_url()
+    if action_run_url:
+        lines.append(f"*GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
+
+    if blocked:
         commit = blocked.get("first_conflicting_commit")
         if commit:
+            short_sha = commit["sha"][:12]
+            commit_label = slack_link(github_commit_url(commit["sha"]), short_sha)
             lines.append(
-                "First likely source-side commit: "
-                f"{commit['sha']} - {commit['author']} - {commit['subject']}"
+                "*First likely source-side commit:* "
+                f"{commit_label} - {commit['subject']}"
             )
+            lines.append(f"*Author:* {commit['author']}")
 
-    lines.append(f"Health fingerprint: {state['health_fingerprint']}")
-    lines.append(f"Chain fingerprint: {state['chain_fingerprint']}")
+        if blocked["conflicted_files"]:
+            lines.append(f"*Conflicted files ({len(blocked['conflicted_files'])}):*")
+            lines.extend(f"- `{path}`" for path in blocked["conflicted_files"])
+
     return "\n".join(lines)
 
 

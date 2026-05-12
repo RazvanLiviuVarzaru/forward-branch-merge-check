@@ -375,14 +375,29 @@ class StateTests(unittest.TestCase):
                 ],
             }
 
-            check.write_outputs(args, state, [check.NotificationReason.BROKEN])
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "GITHUB_REPOSITORY": "owner/repo",
+                    "GITHUB_RUN_ID": "12345",
+                    "GITHUB_SERVER_URL": "https://github.example",
+                },
+                clear=False,
+            ):
+                check.write_outputs(args, state, [check.NotificationReason.BROKEN])
             compact = json.loads(state_output.read_text(encoding="utf-8"))
             notification = json.loads(notification_output.read_text(encoding="utf-8"))
             github_lines = github_output.read_text(encoding="utf-8").splitlines()
 
         self.assertNotIn("candidate_commits", compact["results"][0])
         self.assertTrue(notification["notify"])
-        self.assertIn("Blocked edge: old -> next", notification["text"])
+        self.assertTrue(notification["text"].startswith("*Repository:* `owner/repo`"))
+        self.assertIn("*Blocked edge:* `old` -> `next`", notification["text"])
+        self.assertIn("<https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
+        self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", notification["text"])
+        self.assertNotIn("Base branch:", notification["text"])
+        self.assertNotIn("Health fingerprint:", notification["text"])
+        self.assertNotIn("Chain fingerprint:", notification["text"])
         self.assertIn("should_notify=true", github_lines)
         self.assertIn("status=broken", github_lines)
 
