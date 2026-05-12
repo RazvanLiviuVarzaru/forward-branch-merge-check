@@ -405,15 +405,17 @@ class StateTests(unittest.TestCase):
 
         self.assertNotIn("candidate_commits", compact["results"][0])
         self.assertTrue(notification["notify"])
-        self.assertTrue(notification["text"].startswith("*Repository:* `owner/repo`"))
-        self.assertIn("\n\n*Status:* 🚨 blocked", notification["text"])
-        self.assertIn("*Blocked edges (2):* 1. `old` -> `next`, 2. `next` -> `main`", notification["text"])
+        self.assertTrue(notification["text"].startswith("*Forward Merge Checker*\n\n- *Status:* 🚨 blocked"))
+        self.assertIn("- *Repository:* `owner/repo`", notification["text"])
+        self.assertIn("- *Reason:* chain became blocked", notification["text"])
+        self.assertIn("- *Blocked edges (2):* 1. `old` -> `next`, 2. `next` -> `main`", notification["text"])
+        self.assertIn("- *Chain:* `old` -> `next` -> `main`", notification["text"])
+        self.assertIn("- *GitHub Actions run:* <https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
         self.assertIn("\n\n*Checked edges:*", notification["text"])
         self.assertIn("1. ❌ `old` -> `next`: conflict", notification["text"])
         self.assertIn("2. ❌ `next` -> `main`: conflict", notification["text"])
         self.assertIn("\n\n*Conflict details:*\n\n1. *Edge:* `old` -> `next`", notification["text"])
         self.assertIn("\n\n2. *Edge:* `next` -> `main`", notification["text"])
-        self.assertIn("<https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
         self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", notification["text"])
         self.assertIn(
             "<https://github.example/owner/repo/commit/def456789012|def456789012>",

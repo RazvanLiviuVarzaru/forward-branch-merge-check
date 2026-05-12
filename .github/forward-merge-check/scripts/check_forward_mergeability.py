@@ -678,13 +678,14 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
         status_text = "🚨 blocked"
 
     lines = [
-        f"*Repository:* `{github_repository_label()}`",
+        "*Forward Merge Checker*",
         "",
-        f"*Status:* {status_text}",
+        f"- *Status:* {status_text}",
+        f"- *Repository:* `{github_repository_label()}`",
     ]
 
     if reasons:
-        lines.append(f"*Reason:* {humanize_notification_reasons(reasons)}")
+        lines.append(f"- *Reason:* {humanize_notification_reasons(reasons)}")
 
     indexed_results = list(enumerate(state["results"], start=1))
     blocked_results = [
@@ -695,14 +696,13 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
             f"{index}. `{result['source_label']}` -> `{result['target']}`"
             for index, result in blocked_results
         )
-        lines.append(f"*Blocked edges ({len(blocked_results)}):* {blocked_edges}")
+        lines.append(f"- *Blocked edges ({len(blocked_results)}):* {blocked_edges}")
 
-    lines.append("")
-    lines.append(f"*Chain:* {' -> '.join(f'`{branch}`' for branch in state['branches'])}")
+    lines.append(f"- *Chain:* {' -> '.join(f'`{branch}`' for branch in state['branches'])}")
 
     action_run_url = github_action_run_url()
     if action_run_url:
-        lines.append(f"*GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
+        lines.append(f"- *GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
 
     if indexed_results:
         lines.append("")
