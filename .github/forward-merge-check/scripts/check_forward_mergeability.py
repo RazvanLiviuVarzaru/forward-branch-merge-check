@@ -664,46 +664,63 @@ def result_status_label(status: str) -> str:
     return labels.get(status, status)
 
 
+def result_status_icon(status: str) -> str:
+    if status == "conflict":
+        return "❌"
+    if status in {"merge_ok", "nothing_to_merge"}:
+        return "✅"
+    return "⚪"
+
+
 def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
-    headline = "✅ Forward merge chain is healthy"
+    status_text = "✅ healthy"
     if state["status"] == "broken":
-        headline = "🚨 Forward merge chain is blocked"
+        status_text = "🚨 blocked"
 
     lines = [
         f"*Repository:* `{github_repository_label()}`",
-        f"*{headline}*",
+        "",
+        f"*Status:* {status_text}",
     ]
 
     if reasons:
         lines.append(f"*Reason:* {humanize_notification_reasons(reasons)}")
 
-    blocked_results = [result for result in state["results"] if result["status"] == "conflict"]
+    indexed_results = list(enumerate(state["results"], start=1))
+    blocked_results = [
+        (index, result) for index, result in indexed_results if result["status"] == "conflict"
+    ]
     if blocked_results:
         blocked_edges = ", ".join(
-            f"`{result['source_label']}` -> `{result['target']}`" for result in blocked_results
+            f"{index}. `{result['source_label']}` -> `{result['target']}`"
+            for index, result in blocked_results
         )
         lines.append(f"*Blocked edges ({len(blocked_results)}):* {blocked_edges}")
 
+    lines.append("")
     lines.append(f"*Chain:* {' -> '.join(f'`{branch}`' for branch in state['branches'])}")
 
     action_run_url = github_action_run_url()
     if action_run_url:
         lines.append(f"*GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
 
-    if state["results"]:
+    if indexed_results:
+        lines.append("")
         lines.append("*Checked edges:*")
-        for result in state["results"]:
-            icon = "🚨" if result["status"] == "conflict" else "✅"
+        for index, result in indexed_results:
             lines.append(
-                f"{icon} `{result['source_label']}` -> `{result['target']}`: "
+                f"{index}. {result_status_icon(result['status'])} "
+                f"`{result['source_label']}` -> `{result['target']}`: "
                 f"{result_status_label(result['status'])}"
             )
 
     if blocked_results:
+        lines.append("")
         lines.append("*Conflict details:*")
 
-    for blocked in blocked_results:
-        lines.append(f"🚨 *Edge:* `{blocked['source_label']}` -> `{blocked['target']}`")
+    for index, blocked in blocked_results:
+        lines.append("")
+        lines.append(f"{index}. *Edge:* `{blocked['source_label']}` -> `{blocked['target']}`")
         commit = blocked.get("first_conflicting_commit")
         if commit:
             short_sha = commit["sha"][:12]
