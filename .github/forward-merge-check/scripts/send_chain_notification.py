@@ -54,7 +54,8 @@ def main() -> int:
         print("Notification suppressed by state comparison.")
         return 0
 
-    text = payload.get("text") or "Forward merge chain changed."
+    slack_text = payload.get("slack_text") or payload.get("text") or "Forward merge chain changed."
+    zulip_text = payload.get("zulip_text") or payload.get("text") or "Forward merge chain changed."
     sent = False
 
     slack_webhook = os.environ.get("SLACK_WEBHOOK_URL") if slack_enabled else None
@@ -62,12 +63,12 @@ def main() -> int:
 
     try:
         if slack_webhook:
-            post_slack_webhook(slack_webhook, text)
+            post_slack_webhook(slack_webhook, slack_text)
             print("Sent Slack notification.")
             sent = True
 
         if zulip_webhook:
-            post_zulip_webhook(zulip_webhook, text)
+            post_zulip_webhook(zulip_webhook, zulip_text)
             print("Sent Zulip notification.")
             sent = True
 

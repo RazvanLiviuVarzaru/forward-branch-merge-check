@@ -660,8 +660,12 @@ def github_commit_url(sha: str) -> Optional[str]:
     return f"{repository_url}/commit/{sha}"
 
 
-def slack_link(url: Optional[str], label: str) -> str:
-    return f"<{url}|{label}>" if url else label
+def format_link(url: Optional[str], label: str, style: str) -> str:
+    if not url:
+        return label
+    if style == "zulip":
+        return f"[{label}]({url})"
+    return f"<{url}|{label}>"
 
 
 def humanize_notification_reasons(reasons: list[NotificationReason]) -> str:
@@ -693,7 +697,7 @@ def result_status_icon(status: str) -> str:
     return "⚪"
 
 
-def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
+def format_notification(state: dict, reasons: list[NotificationReason], style: str = "slack") -> str:
     status_text = "✅ healthy"
     if state["status"] == "broken":
         status_text = "🚨 blocked"
@@ -723,7 +727,7 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
 
     action_run_url = github_action_run_url()
     if action_run_url:
-        lines.append(f"- *GitHub Actions run:* {slack_link(action_run_url, 'open run')}")
+        lines.append(f"- *GitHub Actions run:* {format_link(action_run_url, 'open run', style)}")
 
     if indexed_results:
         lines.append("")
@@ -745,7 +749,7 @@ def format_notification(state: dict, reasons: list[NotificationReason]) -> str:
         commit = blocked.get("first_conflicting_commit")
         if commit:
             short_sha = commit["sha"][:12]
-            commit_label = slack_link(github_commit_url(commit["sha"]), short_sha)
+            commit_label = format_link(github_commit_url(commit["sha"]), short_sha, style)
             lines.append(
                 "*First likely source-side commit:* "
                 f"{commit_label} - {commit['subject']}"
@@ -803,7 +807,9 @@ def write_outputs(args: argparse.Namespace, state: dict, reasons: list[Notificat
         "notify": bool(reasons),
         "reasons": [reason.value for reason in reasons],
         "status": state["status"],
-        "text": format_notification(state, reasons) if reasons else "",
+        "text": format_notification(state, reasons, "slack") if reasons else "",
+        "slack_text": format_notification(state, reasons, "slack") if reasons else "",
+        "zulip_text": format_notification(state, reasons, "zulip") if reasons else "",
         "state": state,
     }
 

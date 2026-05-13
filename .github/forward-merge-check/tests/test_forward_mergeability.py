@@ -422,33 +422,42 @@ class StateTests(unittest.TestCase):
             compact = json.loads(state_output.read_text(encoding="utf-8"))
             notification = json.loads(notification_output.read_text(encoding="utf-8"))
             github_lines = github_output.read_text(encoding="utf-8").splitlines()
+            slack_text = notification["slack_text"]
+            zulip_text = notification["zulip_text"]
 
         self.assertNotIn("candidate_commits", compact["results"][0])
         self.assertTrue(notification["notify"])
-        self.assertTrue(notification["text"].startswith("*Forward Merge Checker*\n\n- *Status:* 🚨 blocked"))
-        self.assertIn("- *Repository:* `owner/repo`", notification["text"])
-        self.assertIn("- *Reason:* chain became blocked", notification["text"])
-        self.assertIn("- *Blocked edges (2):* 1. `old` -> `next`, 2. `next` -> `main`", notification["text"])
-        self.assertIn("- *Chain:* `old` -> `next` -> `main`", notification["text"])
-        self.assertIn("- *GitHub Actions run:* <https://github.example/owner/repo/actions/runs/12345|open run>", notification["text"])
-        self.assertIn("\n\n*Checked edges:*", notification["text"])
-        self.assertIn("1. ❌ `old` -> `next`: conflict", notification["text"])
-        self.assertIn("2. ❌ `next` -> `main`: conflict", notification["text"])
-        self.assertIn("\n\n*Conflict details:*\n\n1. *Edge:* `old` -> `next`", notification["text"])
-        self.assertIn("\n\n2. *Edge:* `next` -> `main`", notification["text"])
-        self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", notification["text"])
+        self.assertEqual(notification["text"], slack_text)
+        self.assertTrue(slack_text.startswith("*Forward Merge Checker*\n\n- *Status:* 🚨 blocked"))
+        self.assertIn("- *Repository:* `owner/repo`", slack_text)
+        self.assertIn("- *Reason:* chain became blocked", slack_text)
+        self.assertIn("- *Blocked edges (2):* 1. `old` -> `next`, 2. `next` -> `main`", slack_text)
+        self.assertIn("- *Chain:* `old` -> `next` -> `main`", slack_text)
+        self.assertIn("- *GitHub Actions run:* <https://github.example/owner/repo/actions/runs/12345|open run>", slack_text)
+        self.assertIn("- *GitHub Actions run:* [open run](https://github.example/owner/repo/actions/runs/12345)", zulip_text)
+        self.assertIn("\n\n*Checked edges:*", slack_text)
+        self.assertIn("1. ❌ `old` -> `next`: conflict", slack_text)
+        self.assertIn("2. ❌ `next` -> `main`: conflict", slack_text)
+        self.assertIn("\n\n*Conflict details:*\n\n1. *Edge:* `old` -> `next`", slack_text)
+        self.assertIn("\n\n2. *Edge:* `next` -> `main`", slack_text)
+        self.assertIn("<https://github.example/owner/repo/commit/abc|abc>", slack_text)
+        self.assertIn("[abc](https://github.example/owner/repo/commit/abc)", zulip_text)
         self.assertIn(
             "<https://github.example/owner/repo/commit/def456789012|def456789012>",
-            notification["text"],
+            slack_text,
         )
-        self.assertIn("*Conflicted files (1):*\n```\n- file.txt\n```", notification["text"])
+        self.assertIn(
+            "[def456789012](https://github.example/owner/repo/commit/def456789012)",
+            zulip_text,
+        )
+        self.assertIn("*Conflicted files (1):*\n```\n- file.txt\n```", slack_text)
         self.assertIn(
             "*Conflicted files (2):*\n```\n- other.txt\n- src/deep/path.cc\n```",
-            notification["text"],
+            slack_text,
         )
-        self.assertNotIn("Base branch:", notification["text"])
-        self.assertNotIn("Health fingerprint:", notification["text"])
-        self.assertNotIn("Chain fingerprint:", notification["text"])
+        self.assertNotIn("Base branch:", slack_text)
+        self.assertNotIn("Health fingerprint:", slack_text)
+        self.assertNotIn("Chain fingerprint:", slack_text)
         self.assertIn("should_notify=true", github_lines)
         self.assertIn("status=broken", github_lines)
 
@@ -471,7 +480,10 @@ class NotificationScriptTests(unittest.TestCase):
     def test_posts_to_enabled_webhooks(self):
         with tempfile.TemporaryDirectory() as tmp:
             notification = Path(tmp) / "notification.json"
-            notification.write_text('{"notify": true, "text": "hello"}', encoding="utf-8")
+            notification.write_text(
+                '{"notify": true, "text": "fallback", "slack_text": "hello slack", "zulip_text": "hello zulip"}',
+                encoding="utf-8",
+            )
             config = Path(tmp) / "config.yml"
             config.write_text(
                 """
@@ -482,20 +494,27 @@ notifications:
   slack:
     enabled: true
   zulip:
-    enabled: false
+    enabled: true
 """.lstrip(),
                 encoding="utf-8",
             )
 
-            with mock.patch.dict(os.environ, {"SLACK_WEBHOOK_URL": "https://slack.example"}, clear=False):
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "SLACK_WEBHOOK_URL": "https://slack.example",
+                    "ZULIP_WEBHOOK_URL": "https://zulip.example",
+                },
+                clear=False,
+            ):
                 with mock.patch.object(send, "post_slack_webhook") as slack_post:
                     with mock.patch.object(send, "post_zulip_webhook") as zulip_post:
                         with mock.patch.object(sys, "argv", ["send", "--notification", str(notification), "--config-file", str(config)]):
                             code = quietly(send.main)
 
         self.assertEqual(code, 0)
-        slack_post.assert_called_once_with("https://slack.example", "hello")
-        zulip_post.assert_not_called()
+        slack_post.assert_called_once_with("https://slack.example", "hello slack")
+        zulip_post.assert_called_once_with("https://zulip.example", "hello zulip")
 
 
 if __name__ == "__main__":
