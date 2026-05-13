@@ -30,7 +30,7 @@ def post_json(url: str, payload: dict) -> None:
 
 
 def post_zulip_webhook(url: str, text: str) -> None:
-    post_json(url, {"content": text})
+    post_json(url, {"text": text})
 
 
 def post_slack_webhook(url: str, text: str) -> None:

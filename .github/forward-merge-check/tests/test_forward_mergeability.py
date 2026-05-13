@@ -482,6 +482,12 @@ class StateTests(unittest.TestCase):
 
 
 class NotificationScriptTests(unittest.TestCase):
+    def test_zulip_webhook_uses_slack_compatible_text_payload(self):
+        with mock.patch.object(send, "post_json") as post_json:
+            send.post_zulip_webhook("https://zulip.example", "hello zulip")
+
+        post_json.assert_called_once_with("https://zulip.example", {"text": "hello zulip"})
+
     def test_suppressed_notification_does_not_post(self):
         with tempfile.TemporaryDirectory() as tmp:
             notification = Path(tmp) / "notification.json"
