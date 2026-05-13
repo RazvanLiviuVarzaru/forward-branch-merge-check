@@ -211,6 +211,11 @@ ZULIP_WEBHOOK_URL
 
 If a webhook secret is missing, that destination is skipped.
 
+For Zulip, create an incoming webhook bot and generate a
+`Slack-compatible webhook` integration URL. Select the target channel, enable
+`Send all notifications to a single topic`, choose a topic such as
+`Forward Merge Checker`, and store that generated URL as `ZULIP_WEBHOOK_URL`.
+
 ## Local Use
 
 Run from this tool repository and point `--repo` at any local target clone:
