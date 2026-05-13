@@ -236,6 +236,10 @@ def remote_ref(branch: str) -> str:
     return f"refs/remotes/origin/{branch}"
 
 
+def local_ref(branch: str) -> str:
+    return f"refs/heads/{branch}"
+
+
 def ensure_ref(repo: Path, ref: str) -> None:
     git(repo, ["rev-parse", "--verify", "--quiet", ref])
 
@@ -245,8 +249,23 @@ def has_ref(repo: Path, ref: str) -> bool:
     return proc.returncode == 0
 
 
+def branch_ref(repo: Path, branch: str) -> Optional[str]:
+    if has_ref(repo, remote_ref(branch)):
+        return remote_ref(branch)
+    if has_ref(repo, local_ref(branch)):
+        return local_ref(branch)
+    return None
+
+
+def require_branch_ref(repo: Path, branch: str) -> str:
+    ref = branch_ref(repo, branch)
+    if ref is None:
+        raise ValueError(format_missing_branch_refs_error(repo, [branch], [branch]))
+    return ref
+
+
 def missing_branch_refs(repo: Path, branches: list[str]) -> list[str]:
-    return [branch for branch in branches if not has_ref(repo, remote_ref(branch))]
+    return [branch for branch in branches if branch_ref(repo, branch) is None]
 
 
 def format_missing_branch_refs_error(repo: Path, branches: list[str], missing: list[str]) -> str:
@@ -260,12 +279,15 @@ def format_missing_branch_refs_error(repo: Path, branches: list[str], missing: l
         f"Target repository: {repo}\n\n"
         "Configured branch chain:\n"
         f"{configured}\n\n"
-        "Missing remote-tracking refs:\n"
-        + "\n".join(f"  - {remote_ref(branch)}" for branch in missing)
+        "Missing branch refs:\n"
+        + "\n".join(
+            f"  - {remote_ref(branch)} or {local_ref(branch)}" for branch in missing
+        )
         + "\n\n"
-        "Fetch the missing refs into the target repository:\n\n"
+        "Fetch the missing remote-tracking refs into the target repository:\n\n"
         f"git -C {repo} fetch origin \\\n"
         f"  {fetch_lines}\n\n"
+        "For local-only testing, local branches with the configured names also work.\n\n"
         "If one of these branches no longer exists, update the configured chain "
         "instead of fetching it."
     )
@@ -294,8 +316,7 @@ def get_commit_info(repo: Path, sha: str) -> CommitInfo:
 
 
 def branch_head(repo: Path, branch: str) -> str:
-    ensure_ref(repo, remote_ref(branch))
-    return git(repo, ["rev-parse", remote_ref(branch)]).stdout.strip()
+    return git(repo, ["rev-parse", require_branch_ref(repo, branch)]).stdout.strip()
 
 
 def add_worktree(repo: Path, ref: str, scratch_root: Path) -> Path:
@@ -370,7 +391,7 @@ def find_first_conflicting_commit(
     perfect root cause. It is a practical answer to "which introduced commit
     should I inspect first?" for scheduled chain-health runs too, not only PRs.
     """
-    target_ref = remote_ref(target)
+    target_ref = require_branch_ref(repo, target)
 
     for sha in source_commits(repo, target_ref, source_ref):
         ok, _files, _merge_sha = try_merge(repo, target_ref, sha, scratch_root)
@@ -387,7 +408,7 @@ def candidate_commits_for_conflicted_files(
     files: list[str],
     limit_per_file: int = 20,
 ) -> list[CommitInfo]:
-    target_ref = remote_ref(target)
+    target_ref = require_branch_ref(repo, target)
     seen: set[str] = set()
     candidates: list[CommitInfo] = []
 
@@ -425,7 +446,7 @@ def check_merge(
     target: str,
     scratch_root: Path,
 ) -> MergeResult:
-    target_ref = remote_ref(target)
+    target_ref = require_branch_ref(repo, target)
     ensure_ref(repo, target_ref)
     ensure_ref(repo, source_ref)
 
@@ -852,11 +873,11 @@ def print_summary(results: list[MergeResult]) -> None:
         print("Final result: forward merge chain is clean or already merged.")
 
 
-def next_source_after_result(result: MergeResult) -> tuple[str, str]:
+def next_source_after_result(repo: Path, result: MergeResult) -> tuple[str, str]:
     if result.status == "merge_ok":
         return f"test merge through {result.target}", result.source_ref
 
-    return result.target, remote_ref(result.target)
+    return result.target, require_branch_ref(repo, result.target)
 
 
 def first_downstream_broken_target_index(
@@ -927,7 +948,7 @@ def run_pr_mode(
         if result.status == "conflict":
             break
 
-        source_label, source_ref = next_source_after_result(result)
+        source_label, source_ref = next_source_after_result(repo, result)
 
     return results
 
@@ -935,14 +956,14 @@ def run_pr_mode(
 def run_chain_health_mode(repo: Path, branches: list[str], base_branch: str, scratch_root: Path) -> list[MergeResult]:
     results: list[MergeResult] = []
     source_label = base_branch
-    source_ref = remote_ref(base_branch)
+    source_ref = require_branch_ref(repo, base_branch)
 
     for target in branch_targets_after(branches, base_branch):
         result = check_merge(repo, source_label, source_ref, target, scratch_root)
         results.append(result)
         print_result(result)
 
-        source_label, source_ref = next_source_after_result(result)
+        source_label, source_ref = next_source_after_result(repo, result)
 
     return results
 

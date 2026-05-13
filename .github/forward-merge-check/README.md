@@ -354,7 +354,9 @@ From the tool repository:
 cd ~/src/forward-branch-merge-check
 ```
 
-Make sure the target repository has the branch-chain refs available:
+Make sure the target repository has the branch-chain refs available. The script
+prefers remote-tracking refs such as `origin/10.11`, which is what the GitHub
+Actions workflow fetches:
 
 ```bash
 git -C ~/src/server fetch origin \
@@ -365,6 +367,18 @@ git -C ~/src/server fetch origin \
   +refs/heads/12.3:refs/remotes/origin/12.3 \
   +refs/heads/main:refs/remotes/origin/main
 ```
+
+For a local-only repository with no `origin` remote, local branches with the
+same configured names also work:
+
+```text
+refs/heads/10.6
+refs/heads/10.11
+refs/heads/11.4
+```
+
+When both exist, the script uses `refs/remotes/origin/<branch>` first and falls
+back to `refs/heads/<branch>`.
 
 If a configured branch does not exist in the target repository, update the
 config file instead of fetching it. For example, if the config lists `12.3` but

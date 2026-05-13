@@ -78,7 +78,7 @@ class GitRepo:
         return git(self.path, "rev-parse", branch)
 
 
-def make_clean_chain(root: Path) -> GitRepo:
+def make_clean_chain(root: Path, expose_origin: bool = True) -> GitRepo:
     repo = GitRepo(root / "repo")
     repo.write("file1.txt", "base\n")
     repo.write("file2.txt", "base\n")
@@ -97,8 +97,9 @@ def make_clean_chain(root: Path) -> GitRepo:
     repo.write("file3.txt", "main\n")
     repo.commit("main file3")
 
-    for branch in ["old", "next", "main"]:
-        repo.expose_origin_ref(branch)
+    if expose_origin:
+        for branch in ["old", "next", "main"]:
+            repo.expose_origin_ref(branch)
 
     return repo
 
@@ -203,6 +204,25 @@ class MergeCheckTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "refs/remotes/origin/missing"):
                 check.ensure_branch_refs(repo.path, ["old", "missing"])
+
+    def test_chain_health_uses_local_branches_without_origin_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_clean_chain(Path(tmp), expose_origin=False)
+            scratch = Path(tmp) / "scratch"
+            scratch.mkdir()
+
+            check.ensure_branch_refs(repo.path, ["old", "next", "main"])
+            results = quietly(
+                check.run_chain_health_mode,
+                repo.path,
+                ["old", "next", "main"],
+                "old",
+                scratch,
+            )
+            old_ref = check.branch_ref(repo.path, "old")
+
+        self.assertEqual([result.status for result in results], ["merge_ok", "merge_ok"])
+        self.assertEqual(old_ref, "refs/heads/old")
 
     def test_chain_health_clean_chain(self):
         with tempfile.TemporaryDirectory() as tmp:
