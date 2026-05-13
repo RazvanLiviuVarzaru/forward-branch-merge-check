@@ -70,22 +70,29 @@ secret mapping from the target stubs.
 
 ## Configuration
 
-The default branch chain is configured in the tool repository at:
+Branch chains are configured per target repository under:
 
 ```text
-.github/forward-merge-check/forward-merge-chain.yml
+.github/forward-merge-check/repositories/
+```
+
+Example:
+
+```text
+.github/forward-merge-check/repositories/mariadb-server.yml
 ```
 
 ```yaml
-base_branch: "10.6"
+name: MariaDB Server
+repository: MariaDB/server
+
+base_branch: "bb-10.6-release"
 
 branches:
-  - "10.6"
-  - "10.11"
-  - "11.4"
-  - "11.8"
-  - "12.3"
-  - "main"
+  - "bb-10.6-release"
+  - "bb-10.11-release"
+  - "bb-11.4-release"
+  - "bb-11.8-release"
 
 notifications:
   slack:
@@ -101,12 +108,12 @@ notifications:
 `base_branch` is where the full chain-health check starts. Usually this is the
 first branch in `branches`.
 
-For multiple target repositories, keep multiple config files in this repository
-and point each target stub at the right one:
+For multiple target repositories, add one config file per target repository and
+point each target stub at the right one:
 
 ```yaml
 with:
-  config_path: .github/forward-merge-check/config/mariadb-server.yml
+  config_path: .github/forward-merge-check/repositories/mariadb-server.yml
 ```
 
 ## Reusable PR Workflow
@@ -135,7 +142,7 @@ jobs:
     with:
       tool_repository: YOUR_ORG/forward-branch-merge-check
       tool_ref: main
-      config_path: .github/forward-merge-check/forward-merge-chain.yml
+      config_path: .github/forward-merge-check/repositories/mariadb-server.yml
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
 ```
@@ -208,7 +215,7 @@ jobs:
     with:
       tool_repository: YOUR_ORG/forward-branch-merge-check
       tool_ref: main
-      config_path: .github/forward-merge-check/forward-merge-chain.yml
+      config_path: .github/forward-merge-check/repositories/mariadb-server.yml
       state_cache_key: forward-merge-chain-state
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
@@ -355,41 +362,40 @@ cd ~/src/forward-branch-merge-check
 ```
 
 Make sure the target repository has the branch-chain refs available. The script
-prefers remote-tracking refs such as `origin/10.11`, which is what the GitHub
-Actions workflow fetches:
+prefers remote-tracking refs such as `origin/bb-10.11-release`, which is what
+the GitHub Actions workflow fetches:
 
 ```bash
 git -C ~/src/server fetch origin \
-  +refs/heads/10.6:refs/remotes/origin/10.6 \
-  +refs/heads/10.11:refs/remotes/origin/10.11 \
-  +refs/heads/11.4:refs/remotes/origin/11.4 \
-  +refs/heads/11.8:refs/remotes/origin/11.8 \
-  +refs/heads/12.3:refs/remotes/origin/12.3 \
-  +refs/heads/main:refs/remotes/origin/main
+  +refs/heads/bb-10.6-release:refs/remotes/origin/bb-10.6-release \
+  +refs/heads/bb-10.11-release:refs/remotes/origin/bb-10.11-release \
+  +refs/heads/bb-11.4-release:refs/remotes/origin/bb-11.4-release \
+  +refs/heads/bb-11.8-release:refs/remotes/origin/bb-11.8-release
 ```
 
 For a local-only repository with no `origin` remote, local branches with the
 same configured names also work:
 
 ```text
-refs/heads/10.6
-refs/heads/10.11
-refs/heads/11.4
+refs/heads/bb-10.6-release
+refs/heads/bb-10.11-release
+refs/heads/bb-11.4-release
 ```
 
 When both exist, the script uses `refs/remotes/origin/<branch>` first and falls
 back to `refs/heads/<branch>`.
 
 If a configured branch does not exist in the target repository, update the
-config file instead of fetching it. For example, if the config lists `12.3` but
-the target repo only has `origin/12.0` and `origin/12.1`, change the chain to
-the real branch names before running the check.
+config file instead of fetching it. For example, if the config lists
+`bb-12.3-release` but the target repo only has `origin/bb-12.0-release` and
+`origin/bb-12.1-release`, change the chain to the real branch names before
+running the check.
 
 Print configured branches:
 
 ```bash
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
-  --config-file .github/forward-merge-check/forward-merge-chain.yml \
+  --config-file .github/forward-merge-check/repositories/mariadb-server.yml \
   --print-branches
 ```
 
@@ -400,7 +406,7 @@ available:
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
   --repo ~/src/server \
   --mode chain-health \
-  --config-file .github/forward-merge-check/forward-merge-chain.yml
+  --config-file .github/forward-merge-check/repositories/mariadb-server.yml
 ```
 
 Run a PR-like check against any local ref:
@@ -409,8 +415,8 @@ Run a PR-like check against any local ref:
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
   --repo ~/src/server \
   --mode pr \
-  --config-file .github/forward-merge-check/forward-merge-chain.yml \
-  --base-branch 10.6 \
+  --config-file .github/forward-merge-check/repositories/mariadb-server.yml \
+  --base-branch bb-10.6-release \
   --pr-ref my-local-pr-branch
 ```
 

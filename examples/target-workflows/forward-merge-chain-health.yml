@@ -15,7 +15,7 @@ jobs:
     with:
       tool_repository: YOUR_ORG/forward-branch-merge-check
       tool_ref: main
-      config_path: .github/forward-merge-check/forward-merge-chain.yml
+      config_path: .github/forward-merge-check/repositories/mariadb-server.yml
       state_cache_key: forward-merge-chain-state
     secrets:
       tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}

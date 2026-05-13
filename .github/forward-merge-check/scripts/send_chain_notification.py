@@ -38,7 +38,7 @@ def main() -> int:
     parser.add_argument(
         "--config-file",
         type=Path,
-        default=Path(".github/forward-merge-check/forward-merge-chain.yml"),
+        default=Path(".github/forward-merge-check/repositories/mariadb-server.yml"),
     )
     args = parser.parse_args()
 

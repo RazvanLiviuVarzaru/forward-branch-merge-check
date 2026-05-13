@@ -1,3 +1,6 @@
+name: MariaDB Server
+repository: MariaDB/server
+
 # Ordered from oldest/stablest to newest.
 base_branch: "bb-10.6-release"
 

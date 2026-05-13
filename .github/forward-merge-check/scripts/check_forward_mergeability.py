@@ -16,7 +16,7 @@ from typing import Optional
 
 
 DEFAULT_BRANCHES = ["10.6", "10.11", "11.4", "11.8", "12.3", "main"]
-DEFAULT_CONFIG_FILE = Path(".github/forward-merge-check/forward-merge-chain.yml")
+DEFAULT_CONFIG_FILE = Path(".github/forward-merge-check/repositories/mariadb-server.yml")
 LEGACY_BRANCH_FILE = Path(".github/forward-merge-branches.txt")
 
 
@@ -94,7 +94,7 @@ def parse_scalar(value: str) -> object:
 
 def read_simple_yaml(path: Path) -> dict:
     """
-    Parse the tiny YAML subset used by .github/forward-merge-check/forward-merge-chain.yml.
+    Parse the tiny YAML subset used by repository config files.
 
     Supported forms:
       key: value

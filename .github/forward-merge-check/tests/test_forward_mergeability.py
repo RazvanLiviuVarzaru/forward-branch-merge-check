@@ -190,7 +190,7 @@ notifications:
         args = argparse.Namespace(
             branches=["old", "old"],
             branch_file=None,
-            config_file=ROOT / "forward-merge-chain.yml",
+            config_file=ROOT / "repositories" / "mariadb-server.yml",
         )
 
         with self.assertRaisesRegex(ValueError, "duplicates"):

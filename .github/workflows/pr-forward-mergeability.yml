@@ -16,7 +16,7 @@ on:
         description: Branch-chain config path inside the tool repository.
         required: false
         type: string
-        default: .github/forward-merge-check/forward-merge-chain.yml
+        default: .github/forward-merge-check/repositories/mariadb-server.yml
     secrets:
       tool_repository_token:
         description: Optional token for checking out a private tool repository.

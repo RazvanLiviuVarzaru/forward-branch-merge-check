@@ -16,7 +16,7 @@ on:
         description: Branch-chain config path inside the tool repository.
         required: false
         type: string
-        default: .github/forward-merge-check/forward-merge-chain.yml
+        default: .github/forward-merge-check/repositories/mariadb-server.yml
       state_cache_key:
         description: GitHub Actions cache key prefix used to restore and save chain state.
         required: false
