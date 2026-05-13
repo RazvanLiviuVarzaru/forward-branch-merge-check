@@ -1,170 +1,39 @@
 # Forward Branch Merge Check
 
-This repository is intended to be the central home for forward-merge checking.
+Central reusable GitHub Actions workflows and scripts for checking whether
+changes can be forward-merged through an ordered branch chain.
 
-Target repositories should keep only small workflow stubs. The scripts,
-configuration, tests, and reusable workflows live here, so behavior changes are
-controlled by pushes to this repository.
+Target repositories keep only small workflow stubs. The reusable workflows,
+scripts, tests, and per-repository branch-chain configs live in this tool
+repository.
 
-## Repository Model
+## Important Behavior
 
-There are two repositories involved:
+### PR Workflow
 
-- Tool repository: this repository. It owns the reusable workflows, scripts,
-  tests, and branch-chain configuration.
-- Target repository: for example `MariaDB/server`. It owns the branches and PRs
-  being checked.
-
-The target repository calls reusable workflows from the tool repository:
-
-```yaml
-jobs:
-  pr-forward-mergeability:
-    uses: YOUR_ORG/forward-branch-merge-check/.github/workflows/pr-forward-mergeability.yml@main
-```
-
-The reusable workflow checks out:
-
-1. the target repository into `target/`
-2. this tool repository into `tool/`
-
-Then it runs scripts from `tool/` against Git refs in `target/`.
-
-## Target Repository Installation
-
-Copy only these tiny workflow stubs into the target repository:
+The PR workflow answers one question:
 
 ```text
-.github/workflows/pr-forward-mergeability.yml
-.github/workflows/forward-merge-chain-health.yml
+If this PR lands in its target branch, will that result forward-merge cleanly?
 ```
 
-Examples are provided in:
+It does not test whether the PR merges into its own target branch. GitHub
+already computes PR mergeability for the target branch, and if that merge has
+conflicts GitHub will not run normal PR CI for the synthetic merge commit.
 
-```text
-examples/target-workflows/
-```
+Important PR behavior:
 
-Replace `YOUR_ORG/forward-branch-merge-check` with the real tool repository.
-
-For PR checks, the tiny PR workflow stub must exist on every target branch that
-should run this check. GitHub discovers `pull_request` workflows from the pull
-request base branch. For example, a PR targeting `10.11` will only run this
-workflow if `.github/workflows/pr-forward-mergeability.yml` exists on `10.11`.
-
-The reusable workflow implementation still lives in the tool repository. The
-files copied to the target branches are only small stubs that call it.
-
-For the scheduled chain-health check, the tiny chain-health workflow only needs
-to exist on the target repository's default branch.
-
-If the tool repository is private, create a target-repository secret with a token
-that can read the tool repository:
-
-```text
-FORWARD_MERGE_CHECK_TOKEN
-```
-
-If the tool repository is public, you can remove the `tool_repository_token`
-secret mapping from the target stubs.
-
-## Configuration
-
-Branch chains are configured per target repository under:
-
-```text
-.github/forward-merge-check/repositories/
-```
-
-Example:
-
-```text
-.github/forward-merge-check/repositories/mariadb-server.yml
-```
-
-```yaml
-name: MariaDB Server
-repository: MariaDB/server
-
-base_branch: "bb-10.6-release"
-
-branches:
-  - "bb-10.6-release"
-  - "bb-10.11-release"
-  - "bb-11.4-release"
-  - "bb-11.8-release"
-
-notifications:
-  slack:
-    enabled: true
-    secret: SLACK_WEBHOOK_URL
-  zulip:
-    enabled: true
-    secret: ZULIP_WEBHOOK_URL
-```
-
-`branches` must be ordered from oldest/stablest to newest.
-
-`base_branch` is where the full chain-health check starts. Usually this is the
-first branch in `branches`.
-
-For multiple target repositories, add one config file per target repository and
-point each target stub at the right one:
-
-```yaml
-with:
-  config_path: .github/forward-merge-check/repositories/mariadb-server.yml
-```
-
-## Reusable PR Workflow
-
-Reusable workflow:
-
-```text
-.github/workflows/pr-forward-mergeability.yml
-```
-
-Target stub example:
-
-```yaml
-name: PR forward mergeability
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-
-permissions:
-  contents: read
-
-jobs:
-  pr-forward-mergeability:
-    uses: YOUR_ORG/forward-branch-merge-check/.github/workflows/pr-forward-mergeability.yml@main
-    with:
-      tool_repository: YOUR_ORG/forward-branch-merge-check
-      tool_ref: main
-      config_path: .github/forward-merge-check/repositories/mariadb-server.yml
-    secrets:
-      tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
-```
-
-Expected behavior:
-
-- If the PR target branch is not in the configured chain, the workflow exits
-  successfully and skips the check.
-- The PR workflow does not test whether the PR branch merges into its own
-  target branch. GitHub already computes the pull request mergeability for the
-  target branch, and if that merge has conflicts GitHub will not run the normal
-  pull request CI for the synthetic merge commit.
-- The baseline sanity check starts at the PR target branch, not at the global
-  configured `base_branch`.
-- If the baseline chain is healthy downstream from the PR target, the PR is
-  tested through every later branch.
-- If the baseline chain is already broken downstream from the PR target, the PR
-  is tested only until that known-broken edge.
-- If the PR causes a new conflict before the known-broken edge, the workflow
-  fails.
-- If the only conflict is already present in the baseline chain, the PR workflow
-  exits successfully.
+- The PR workflow stub must exist on every PR target branch that should run the
+  check. GitHub discovers `pull_request` workflows from the PR base branch.
+- If the PR target branch is not in the configured chain, the check exits
+  successfully and skips.
+- Baseline sanity starts at the PR target branch, not at the global
+  `base_branch`.
+- If the downstream chain is already broken without the PR, the PR is checked
+  only until that known-broken edge.
+- The PR fails only when it introduces a new forward-merge conflict before that
+  known-broken edge.
+- PR workflows do not send Slack or Zulip notifications.
 
 Example:
 
@@ -176,64 +45,28 @@ baseline:
 
 PR target:
 10.11
-```
 
-The PR workflow tests:
-
-```text
+checked:
 PR-applied 10.11 -> 11.4
 ```
 
-Then it stops before `11.4 -> 11.8`, because that edge is already broken
+The workflow stops before `11.4 -> 11.8` because that edge is already broken
 without the PR.
 
-## Reusable Chain-Health Workflow
+### Chain-Health Workflow
 
-Reusable workflow:
+The chain-health workflow checks the configured chain on a schedule or manual
+dispatch. It does not run on every push.
 
-```text
-.github/workflows/forward-merge-chain-health.yml
-```
+Important chain-health behavior:
 
-Target stub example:
-
-```yaml
-name: Forward merge chain health
-
-on:
-  schedule:
-    - cron: "*/30 * * * *"
-
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  chain-health:
-    uses: YOUR_ORG/forward-branch-merge-check/.github/workflows/forward-merge-chain-health.yml@main
-    with:
-      tool_repository: YOUR_ORG/forward-branch-merge-check
-      tool_ref: main
-      config_path: .github/forward-merge-check/repositories/mariadb-server.yml
-      state_cache_key: forward-merge-chain-state
-    secrets:
-      tool_repository_token: ${{ secrets.FORWARD_MERGE_CHECK_TOKEN }}
-      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-      zulip_webhook_url: ${{ secrets.ZULIP_WEBHOOK_URL }}
-```
-
-This workflow does not run on every push, so developer branches do not trigger
-it.
-
-The workflow checks the whole configured chain and records every adjacent edge
-it can.
-
-Important behavior:
-
+- Every adjacent edge is checked.
 - If an edge merges cleanly, the next edge uses the synthetic merge result.
-- If an edge is already broken, the next edge resets to the real target branch.
-- The script does not build synthetic merge state across a failed edge.
+- If an edge is broken, the next edge resets to the real target branch.
+- The script never builds synthetic merge state across a failed edge.
+- The workflow fails if any checked edge has a conflict.
+- State is still written and notifications can still be sent before the
+  workflow fails.
 
 Example:
 
@@ -253,154 +86,134 @@ not:
 failed synthetic 10.11 -> 11.4
 ```
 
-The workflow fails if any checked edge has a conflict. It still writes state and
-can send notifications before failing.
+### Conflict Reports
 
-## Conflict Reports
+When a merge fails, the script reports:
 
-When a merge fails, the script prints:
-
-- the blocked edge, for example `10.11 -> 11.4`
+- blocked edge
 - conflicted files
-- the first likely source-side commit that introduced the conflict
-- candidate source-side commits that touched the conflicted files
+- first likely source-side commit that introduced the conflict
+- candidate source-side commits that touched conflicted files
 
-The "first likely" commit is an approximation. The script tries source-side
-non-merge commits independently against the target branch. A Git conflict is
-caused by the interaction between both branches, so this is a debugging hint,
-not a proof.
+The "first likely" commit is an approximation. Git conflicts come from the
+interaction between both branches, so this is a debugging hint, not proof.
 
-## Notifications
+## Repository Model
 
-Notifications are only sent by the chain-health workflow. PR workflows do not
-send Slack or Zulip messages.
+The target repository calls reusable workflows from this tool repository. Each
+run checks out the target repo as `target/` and this repo as `tool/`, then runs
+scripts from `tool/` against refs in `target/`.
 
-The chain-health workflow stores previous health state in the target
-repository's GitHub Actions cache.
+## Configuration
+
+Branch chains are configured per target repository:
+
+```text
+.github/forward-merge-check/repositories/mariadb-server.yml
+```
+
+Example:
+
+```yaml
+name: MariaDB Server
+repository: MariaDB/server
+
+base_branch: "bb-10.6-release"
+
+branches:
+  - "bb-10.6-release"
+  - "bb-10.11-release"
+  - "bb-11.4-release"
+  - "bb-11.8-release"
+
+notifications:
+  slack:
+    enabled: true
+  zulip:
+    enabled: true
+```
+
+Rules:
+
+- `branches` must be ordered oldest/stablest to newest.
+- `base_branch` is where scheduled chain-health starts.
+- Add one file under `repositories/` per target repository.
+- Each target workflow stub selects its config with `config_path`.
+
+## Target Setup
+
+Copy the small workflow stubs from `examples/target-workflows/` into the target
+repository:
+
+```text
+.github/workflows/pr-forward-mergeability.yml
+.github/workflows/forward-merge-chain-health.yml
+```
+
+Update each stub:
+
+```text
+YOUR_ORG/forward-branch-merge-check
+config_path: .github/forward-merge-check/repositories/mariadb-server.yml
+```
+
+If the tool repository is private, add this target-repository secret:
+
+```text
+FORWARD_MERGE_CHECK_TOKEN
+```
+
+If the tool repository is public, remove the `tool_repository_token` secret
+mapping from the stubs.
+
+Placement:
+
+- `pr-forward-mergeability.yml` must exist on every branch that can be a PR
+  target.
+- `forward-merge-chain-health.yml` only needs to exist on the target
+  repository default branch.
+
+## Notifications And State
+
+Only chain-health sends Slack or Zulip notifications.
+
+State is stored in the target repository's GitHub Actions cache:
 
 ```text
 restore prefix: forward-merge-chain-state-
 saved key:      forward-merge-chain-state-<run_id>-<run_attempt>
-path: .forward-merge-check-state/state.json
+path:           .forward-merge-check-state/state.json
 ```
 
-The workflow restores the newest cache entry with the configured prefix before
-the check, writes the new state after the check, and saves it under a new
-run-specific cache key. This avoids personal access tokens or GitHub Apps.
+This avoids personal access tokens and GitHub Apps. Cache entries are immutable
+and may be evicted; if state disappears, the next run behaves like a first run.
 
-The chain-health job uses a concurrency group so two scheduled/manual runs do
-not compute and save state at the same time.
-
-GitHub caches are immutable and can be evicted. Keeping one tiny state file per
-run is intentional; GitHub will age out old entries. If the state cache
-disappears, the next run acts like a first run and creates a new cache entry.
-
-The state contains:
-
-- `status`: `healthy` or `broken`
-- `config_fingerprint`: fingerprint of `base_branch` and `branches`
-- `chain_fingerprint`: fingerprint of branch heads in the configured chain
-- `health_fingerprint`: fingerprint of the merge-health result
-- compact per-edge results
-
-This state prevents duplicate notifications. A chain that stays broken in the
-same way will keep failing the workflow, but it will not send the same alert
-every 30 minutes.
+The workflow uses a concurrency group so scheduled/manual runs do not compute
+and save state at the same time.
 
 Notifications are sent when:
 
 - the first observed state is already broken
 - the chain changes from healthy to broken
 - the chain changes from broken to healthy
-- the broken result changes, for example a different blocked edge, conflicted
-  files, or likely conflict commit
+- the broken result changes
 - the configured chain changes while the chain is broken
 
-Notifications are suppressed when:
+Notifications are suppressed when the chain stays healthy or stays broken in
+the same way.
 
-- the chain stays healthy
-- the chain stays broken in the same way
-
-To enable external notifications, add either or both target-repository secrets:
+Optional target-repository secrets:
 
 ```text
 SLACK_WEBHOOK_URL
 ZULIP_WEBHOOK_URL
 ```
 
-If a secret is missing, that destination is skipped. If both secrets are
-missing, the workflow still computes and stores state but sends no external
-notification.
-
-## Expected Exit Codes
-
-`check_forward_mergeability.py` exits with:
-
-- `0` when the checked PR/chain is clean or skipped
-- `1` when the checked PR/chain has a conflict
-- `2` when there is a script/config/runtime error
-
-For PR mode, baseline-chain conflicts do not directly cause exit code `1`.
-Only PR-forward conflicts in the tested range fail the PR.
+If a webhook secret is missing, that destination is skipped.
 
 ## Local Use
 
-For local manual testing, keep the scripts in this tool repository and point
-them at any target repository you already have checked out locally.
-
-Example layout:
-
-```text
-~/src/forward-branch-merge-check   # this tool repository
-~/src/server                       # target repository to check
-```
-
-From the tool repository:
-
-```bash
-cd ~/src/forward-branch-merge-check
-```
-
-Make sure the target repository has the branch-chain refs available. The script
-prefers remote-tracking refs such as `origin/bb-10.11-release`, which is what
-the GitHub Actions workflow fetches:
-
-```bash
-git -C ~/src/server fetch origin \
-  +refs/heads/bb-10.6-release:refs/remotes/origin/bb-10.6-release \
-  +refs/heads/bb-10.11-release:refs/remotes/origin/bb-10.11-release \
-  +refs/heads/bb-11.4-release:refs/remotes/origin/bb-11.4-release \
-  +refs/heads/bb-11.8-release:refs/remotes/origin/bb-11.8-release
-```
-
-For a local-only repository with no `origin` remote, local branches with the
-same configured names also work:
-
-```text
-refs/heads/bb-10.6-release
-refs/heads/bb-10.11-release
-refs/heads/bb-11.4-release
-```
-
-When both exist, the script uses `refs/remotes/origin/<branch>` first and falls
-back to `refs/heads/<branch>`.
-
-If a configured branch does not exist in the target repository, update the
-config file instead of fetching it. For example, if the config lists
-`bb-12.3-release` but the target repo only has `origin/bb-12.0-release` and
-`origin/bb-12.1-release`, change the chain to the real branch names before
-running the check.
-
-Print configured branches:
-
-```bash
-python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
-  --config-file .github/forward-merge-check/repositories/mariadb-server.yml \
-  --print-branches
-```
-
-Run the full chain-health check from a clone that has the branch-chain refs
-available:
+Run from this tool repository and point `--repo` at any local target clone:
 
 ```bash
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
@@ -409,7 +222,7 @@ python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
   --config-file .github/forward-merge-check/repositories/mariadb-server.yml
 ```
 
-Run a PR-like check against any local ref:
+PR-like local check:
 
 ```bash
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
@@ -420,10 +233,19 @@ python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
   --pr-ref my-local-pr-branch
 ```
 
-The target repository does not need a copy of the scripts for these local
-checks. The `--repo` option points the tool at the target repository.
+Branch refs:
 
-Override the branch chain without editing the config file:
+- The script prefers `refs/remotes/origin/<branch>`.
+- For local-only repositories, `refs/heads/<branch>` also works.
+- If both exist, `origin/<branch>` wins.
+
+Useful commands:
+
+```bash
+python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
+  --config-file .github/forward-merge-check/repositories/mariadb-server.yml \
+  --print-branches
+```
 
 ```bash
 python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
@@ -433,12 +255,17 @@ python3 .github/forward-merge-check/scripts/check_forward_mergeability.py \
   --branches release/1.0 release/1.1 main
 ```
 
+## Exit Codes
+
+- `0`: clean, already merged, or skipped
+- `1`: checked PR/chain has a conflict
+- `2`: script/config/runtime error
+
+In PR mode, baseline-chain conflicts do not directly cause exit code `1`.
+Only PR-forward conflicts in the tested range fail the PR.
+
 ## Tests
 
-The test suite uses only the Python standard library and local synthetic Git
-repositories:
-
 ```bash
-python3 -m unittest discover \
-  -s .github/forward-merge-check/tests
+python3 -m unittest discover -s .github/forward-merge-check/tests
 ```
