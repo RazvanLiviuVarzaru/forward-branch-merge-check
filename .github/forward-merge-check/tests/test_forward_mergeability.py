@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,6 +15,11 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(ROOT))
+
+from forward_merge_check import config as config_mod
+from forward_merge_check import git_ops, modes, output, state as state_mod
+from forward_merge_check.models import NotificationReason
 
 
 def load_script(name: str):
@@ -25,7 +31,20 @@ def load_script(name: str):
     return module
 
 
-check = load_script("check_forward_mergeability")
+check = types.SimpleNamespace(
+    NotificationReason=NotificationReason,
+    branch_ref=git_ops.branch_ref,
+    compact_state=state_mod.compact_state,
+    current_state=state_mod.current_state,
+    ensure_branch_refs=git_ops.ensure_branch_refs,
+    load_branches=config_mod.load_branches,
+    load_config=config_mod.load_config,
+    load_previous_state_file=state_mod.load_previous_state_file,
+    notification_reasons=state_mod.notification_reasons,
+    run_chain_health_mode=modes.run_chain_health_mode,
+    run_pr_mode=modes.run_pr_mode,
+    write_outputs=output.write_outputs,
+)
 send = load_script("send_chain_notification")
 
 
