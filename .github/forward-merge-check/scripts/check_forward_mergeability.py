@@ -10,12 +10,12 @@ TOOL_ROOT = Path(__file__).resolve().parents[1]
 if str(TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT))
 
-from forward_merge_check.args import parse_args
-from forward_merge_check.config import load_base_branch, load_branches
-from forward_merge_check.git_ops import ensure_branch_refs
-from forward_merge_check.modes import run_chain_health_mode, run_pr_mode
-from forward_merge_check.output import print_summary, write_outputs
-from forward_merge_check.state import (
+from checker.args import parse_args
+from checker.config import load_base_branch, load_branches
+from checker.git_ops import ensure_branch_refs
+from checker.modes import run_chain_health_mode, run_pr_mode
+from checker.output import print_summary, write_outputs
+from checker.state import (
     current_state,
     load_previous_state,
     load_previous_state_file,

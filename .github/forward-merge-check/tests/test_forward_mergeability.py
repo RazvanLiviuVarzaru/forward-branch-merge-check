@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(ROOT))
 
-from forward_merge_check import config as config_mod
-from forward_merge_check import git_ops, modes, output, state as state_mod
-from forward_merge_check.models import NotificationReason
+from checker import config as config_mod
+from checker import git_ops, modes, output, state as state_mod
+from checker.models import NotificationReason
 
 
 def load_script(name: str):

@@ -13,7 +13,7 @@ TOOL_ROOT = Path(__file__).resolve().parents[1]
 if str(TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT))
 
-from forward_merge_check.config import load_config
+from checker.config import load_config
 
 
 def post_json(url: str, payload: dict) -> None:
